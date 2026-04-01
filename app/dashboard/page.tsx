@@ -19,9 +19,7 @@ type Profile = {
   is_subscribed: boolean;
   plan: string | null;
   charity_id: string | null;
-  charities?: {
-    name: string;
-  } | null;
+  charity_name?: string | null;
 };
 
 export default function DashboardPage() {
@@ -47,22 +45,35 @@ export default function DashboardPage() {
       .order("created_at", { ascending: false })
       .limit(5);
 
-    // fetch profile with charity join
+    // fetch profile
     const { data: profileData } = await supabase
       .from("profiles")
-      .select(
-        `
-        is_subscribed,
-        plan,
-        charity_id,
-        charities(name)
-      `,
-      )
+      .select("is_subscribed, plan, charity_id")
       .eq("id", user.id)
       .single();
 
+    let charityName: string | null = null;
+
+    // fetch charity manually
+    if (profileData?.charity_id) {
+      const { data: charityData } = await supabase
+        .from("charities")
+        .select("name")
+        .eq("id", profileData.charity_id)
+        .single();
+
+      charityName = charityData?.name || null;
+    }
+
     setScores(scoresData || []);
-    setProfile(profileData || null);
+
+    setProfile({
+      is_subscribed: profileData?.is_subscribed ?? false,
+      plan: profileData?.plan ?? null,
+      charity_id: profileData?.charity_id ?? null,
+      charity_name: charityName,
+    });
+
     setLoading(false);
   };
 
@@ -97,7 +108,9 @@ export default function DashboardPage() {
                 {profile?.is_subscribed ? "Active" : "Inactive"}
               </p>
               {profile?.plan && (
-                <p className="text-sm text-white/60">Plan: {profile.plan}</p>
+                <p className="text-sm text-white/60">
+                  Plan: {profile.plan}
+                </p>
               )}
             </div>
           </GlassCard>
@@ -106,7 +119,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-sm text-white/70">Your Charity</p>
               <p className="text-lg font-semibold">
-                {profile?.charities?.name || "Not selected"}
+                {profile?.charity_name || "Not selected"}
               </p>
             </div>
           </GlassCard>
@@ -182,7 +195,9 @@ export default function DashboardPage() {
                   <span className="font-medium text-[#ffe7a3]">
                     Score: {s.score}
                   </span>
-                  <span className="text-sm text-white/70">{s.played_at}</span>
+                  <span className="text-sm text-white/70">
+                    {s.played_at}
+                  </span>
                 </div>
               ))}
             </div>
