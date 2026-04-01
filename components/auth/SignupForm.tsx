@@ -19,13 +19,20 @@ export default function SignupForm() {
     setError("");
     setSuccess("");
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
-
+    
     if (error) {
       setError(error.message);
+      setLoading(false);
+      return;
+    }
+
+    //  IMPORTANT CHECK (duplicate user)
+    if (data.user && data.user.identities?.length === 0) {
+      setError("User already exists. Please login.");
       setLoading(false);
       return;
     }

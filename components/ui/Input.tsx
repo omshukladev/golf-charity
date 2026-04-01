@@ -19,11 +19,12 @@ export default function Input({
     <label className="block">
       <span className="mb-2 block text-sm text-white/80">{label}</span>
       <input
+        suppressHydrationWarning
         type={type}
         value={value}
         placeholder={placeholder}
         onChange={onChange}
-        className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-white placeholder:text-white/45 outline-none transition focus:border-[#45b394]/70 focus:ring-2 focus:ring-[#45b394]/30"
+        className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-white"
       />
     </label>
   );

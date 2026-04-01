@@ -1,13 +1,11 @@
-export default function Dashboard() {
-  return (
-    <div className="flex">
-      <div className="w-60 bg-gray-900 text-white p-4">
-        Dashboard
-      </div>
+import LogoutButton from '@/components/auth/LogoutButton'
 
-      <div className="flex-1 p-6">
-        <h1 className="text-2xl font-bold">Welcome</h1>
-      </div>
+export default function DashboardPage() {
+  return (
+    <div className="p-10 text-white">
+      <h1 className="text-2xl mb-4">Dashboard</h1>
+
+      <LogoutButton />
     </div>
   )
 }

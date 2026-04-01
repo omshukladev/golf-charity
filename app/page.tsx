@@ -1,4 +1,4 @@
-"use client";
+
 import CTA from "@/components/landing/CTA";
 import DrawMechanics from "@/components/landing/DrawMechanics";
 import Hero from "@/components/landing/Hero";
