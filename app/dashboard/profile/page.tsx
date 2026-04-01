@@ -1,17 +1,27 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import PageHeader from "@/components/dashboard/PageHeader";
 import GlassCard from "@/components/dashboard/GlassCard";
 
+type ProfileRecord = {
+  full_name: string | null;
+  avatar_url: string | null;
+};
+
 export default function ProfilePage() {
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState("");
+  const [avatarVersion, setAvatarVersion] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
-  //  Fetch profile
   const fetchProfile = async () => {
     const {
       data: { user },
@@ -19,83 +29,129 @@ export default function ProfilePage() {
 
     if (!user) return;
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select("full_name, avatar_url")
       .eq("id", user.id)
-      .single();
+      .single<ProfileRecord>();
+
+    if (error) {
+      console.error(error);
+      return;
+    }
 
     if (data) {
       setName(data.full_name || "");
       setAvatar(data.avatar_url || "");
+      setAvatarVersion((current) => current + 1);
     }
   };
 
   useEffect(() => {
-    fetchProfile();
+    const timeoutId = window.setTimeout(() => {
+      void fetchProfile();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
-  //  NEW: Upload avatar
   const handleUpload = async (file: File) => {
     setLoading(true);
+    setMessage(null);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    if (!user) {
-      alert("User not logged in");
-      setLoading(false);
-      return;
-    }
+      if (!user) {
+        setMessage({ type: "error", text: "User not logged in." });
+        return;
+      }
 
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${user.id}/avatar.${fileExt}`; //  FIXED
+      const fileExt = file.name.split(".").pop() || "jpg";
+      const filePath = `${user.id}/avatar.${fileExt.toLowerCase()}`;
 
-    const { error } = await supabase.storage
-      .from("avatars")
-      .upload(fileName, file, {
-        upsert: true,
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, {
+          upsert: true,
+          contentType: file.type,
+          cacheControl: "0",
+        });
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        setMessage({ type: "error", text: "Error uploading image." });
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      const publicUrl = publicUrlData.publicUrl;
+
+      const { error: profileError } = await supabase.from("profiles").upsert({
+        id: user.id,
+        full_name: name,
+        avatar_url: publicUrl,
       });
 
-    if (error) {
-      console.error("Upload error:", error);
-      alert("Error uploading image");
+      if (profileError) {
+        console.error(profileError);
+        setMessage({
+          type: "error",
+          text: "Image uploaded, but profile could not be updated.",
+        });
+        setAvatar(publicUrl);
+        setAvatarVersion((current) => current + 1);
+        return;
+      }
+
+      setAvatar(publicUrl);
+      setAvatarVersion((current) => current + 1);
+      setMessage({ type: "success", text: "Avatar updated successfully." });
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
-
-    setAvatar(data.publicUrl);
-    setLoading(false);
   };
 
-  //  Save profile
   const handleSave = async () => {
     setLoading(true);
+    setMessage(null);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    if (!user) return;
+      if (!user) {
+        setMessage({ type: "error", text: "User not logged in." });
+        return;
+      }
 
-    const { error } = await supabase.from("profiles").upsert({
-      id: user.id,
-      full_name: name,
-      avatar_url: avatar,
-    });
+      const { error } = await supabase.from("profiles").upsert({
+        id: user.id,
+        full_name: name,
+        avatar_url: avatar,
+      });
 
-    if (error) {
-      console.error(error);
-      alert("Error saving profile");
-    } else {
-      alert("Profile updated");
+      if (error) {
+        console.error(error);
+        setMessage({ type: "error", text: "Error saving profile." });
+      } else {
+        setMessage({ type: "success", text: "Profile updated successfully." });
+      }
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
+
+  const displayName = name.trim() || "Player";
+  const avatarSrc = avatar
+    ? `${avatar}${avatar.includes("?") ? "&" : "?"}v=${avatarVersion}`
+    : "";
 
   return (
     <DashboardLayout>
@@ -114,17 +170,18 @@ export default function ProfilePage() {
                 </p>
 
                 <div className="mt-3 flex flex-wrap items-center gap-4">
-                  {avatar ? (
-                    <img
-                      src={avatar}
+                  {avatarSrc ? (
+                    <Image
+                      src={avatarSrc}
                       alt="avatar"
+                      width={64}
+                      height={64}
+                      unoptimized
                       className="h-16 w-16 rounded-full border border-white/20 object-cover"
                     />
                   ) : (
                     <div className="flex h-16 w-16 items-center justify-center rounded-full border border-white/20 bg-[#0c1e2d] text-lg font-semibold text-[#ffe7a3]">
-                      {name.trim()
-                        ? name.trim().slice(0, 1).toUpperCase()
-                        : "P"}
+                      {displayName.slice(0, 1).toUpperCase()}
                     </div>
                   )}
 
@@ -134,9 +191,10 @@ export default function ProfilePage() {
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          handleUpload(e.target.files[0]);
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) {
+                          void handleUpload(file);
                         }
                       }}
                     />
@@ -152,10 +210,22 @@ export default function ProfilePage() {
                   type="text"
                   placeholder="Your name"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-[#ffe7a3]/70 focus:ring-2 focus:ring-[#ffe7a3]/25"
+                  onChange={(event) => setName(event.target.value)}
+                  className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-white outline-none transition placeholder:text-white/35 focus:border-[#ffe7a3]/70 focus:ring-2 focus:ring-[#ffe7a3]/25"
                 />
               </label>
+
+              {message ? (
+                <div
+                  className={`rounded-xl border px-4 py-3 text-sm ${
+                    message.type === "success"
+                      ? "border-[#8ff1d2]/45 bg-[#8ff1d2]/10 text-[#c9ffe9]"
+                      : "border-red-300/45 bg-red-400/10 text-red-100"
+                  }`}
+                >
+                  {message.text}
+                </div>
+              ) : null}
 
               <button
                 onClick={handleSave}
@@ -173,7 +243,7 @@ export default function ProfilePage() {
                 Profile Preview
               </p>
               <p className="mt-3 text-xl font-semibold text-[#ffe7a3]">
-                {name.trim() || "Player"}
+                {displayName}
               </p>
               <p className="mt-2 text-sm text-white/70">
                 Keep your profile current for a cleaner dashboard experience.
