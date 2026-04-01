@@ -15,11 +15,21 @@ type Score = {
   created_at: string;
 };
 
+type Profile = {
+  is_subscribed: boolean;
+  plan: string | null;
+  charity_id: string | null;
+  charities?: {
+    name: string;
+  } | null;
+};
+
 export default function DashboardPage() {
   const [scores, setScores] = useState<Score[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchScores = async () => {
+  const fetchData = async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -29,27 +39,40 @@ export default function DashboardPage() {
       return;
     }
 
-    const { data } = await supabase
+    // fetch scores
+    const { data: scoresData } = await supabase
       .from("scores")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(5);
 
-    setScores(data || []);
+    // fetch profile with charity join
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select(
+        `
+        is_subscribed,
+        plan,
+        charity_id,
+        charities(name)
+      `,
+      )
+      .eq("id", user.id)
+      .single();
+
+    setScores(scoresData || []);
+    setProfile(profileData || null);
     setLoading(false);
   };
 
   useEffect(() => {
-    const loadScores = async () => {
-      await fetchScores();
-    };
-
-    void loadScores();
+    void fetchData();
   }, []);
 
   const latestScore = scores[0];
   const isEligible = scores.length === 5;
+
   const averageScore =
     scores.length > 0
       ? (
@@ -65,6 +88,31 @@ export default function DashboardPage() {
           subtitle="Your latest performance snapshot and draw readiness in one view."
         />
 
+        {/* Subscription + Charity */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <GlassCard>
+            <div>
+              <p className="text-sm text-white/70">Subscription</p>
+              <p className="text-lg font-semibold">
+                {profile?.is_subscribed ? "Active" : "Inactive"}
+              </p>
+              {profile?.plan && (
+                <p className="text-sm text-white/60">Plan: {profile.plan}</p>
+              )}
+            </div>
+          </GlassCard>
+
+          <GlassCard>
+            <div>
+              <p className="text-sm text-white/70">Your Charity</p>
+              <p className="text-lg font-semibold">
+                {profile?.charities?.name || "Not selected"}
+              </p>
+            </div>
+          </GlassCard>
+        </div>
+
+        {/* Actions */}
         <GlassCard>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="text-sm text-white/70">
@@ -87,6 +135,7 @@ export default function DashboardPage() {
           </div>
         </GlassCard>
 
+        {/* Metrics */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <MetricCard
             label="Active Scores"
@@ -115,6 +164,7 @@ export default function DashboardPage() {
           />
         </div>
 
+        {/* Scores */}
         <GlassCard>
           <h2 className="text-lg font-semibold">Recent Scores</h2>
 
