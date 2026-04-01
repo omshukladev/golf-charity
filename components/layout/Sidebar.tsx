@@ -17,8 +17,8 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-64 bg-gray-900 border-r border-gray-800 p-5 flex flex-col">
-      <h1 className="text-xl font-bold mb-8">Golf App</h1>
+    <aside className="flex w-64 shrink-0 flex-col border-r border-white/10 bg-[#0a1a27]/70 p-5 backdrop-blur-xl">
+      <h1 className="mb-8 text-xl font-bold text-[#8ff1d2]">Golf Charity</h1>
 
       <nav className="flex flex-col gap-2">
         {navItems.map((item) => {
@@ -28,10 +28,10 @@ export default function Sidebar() {
             <Link
               key={item.name}
               href={item.href}
-              className={`px-3 py-2 rounded-lg transition ${
+              className={`rounded-xl px-3 py-2.5 transition ${
                 isActive
-                  ? "bg-white text-black"
-                  : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                  ? "border border-[#ffe7a3]/65 bg-[#f59f00] text-[#1e1400]"
+                  : "border border-transparent text-white/70 hover:border-white/15 hover:bg-white/10 hover:text-white"
               }`}
             >
               {item.name}
