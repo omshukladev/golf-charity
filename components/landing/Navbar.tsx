@@ -19,7 +19,7 @@ export default function Navbar() {
       transition={{ duration: 0.55, ease: "easeOut" }}
       className="sticky top-4 z-50 mb-6"
     >
-      <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/20 bg-[#0a1a27]/70 px-3 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:px-5">
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/20 bg-[#0a1a27]/70 px-3 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:px-5">
         <Link
           href="#hero"
           className="shrink-0 rounded-full border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#8ff1d2] transition hover:bg-white/15"
@@ -27,7 +27,7 @@ export default function Navbar() {
           Golf Charity
         </Link>
 
-        <nav className="scrollbar-hide flex min-w-0 items-center gap-1 overflow-x-auto px-1">
+        <nav className="scrollbar-hide hidden min-w-0 items-center gap-1 overflow-x-auto px-1 md:flex">
           {navItems.map((item) => (
             <motion.a
               key={item.href}
