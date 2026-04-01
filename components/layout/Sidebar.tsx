@@ -17,15 +17,27 @@ type SidebarProps = {
   open: boolean;
   onClose: () => void;
   onNavigate: () => void;
+  onTouchStart: React.TouchEventHandler<HTMLElement>;
+  onTouchEnd: React.TouchEventHandler<HTMLElement>;
 };
 
-export default function Sidebar({ open, onClose, onNavigate }: SidebarProps) {
+export default function Sidebar({
+  open,
+  onClose,
+  onNavigate,
+  onTouchStart,
+  onTouchEnd,
+}: SidebarProps) {
   const pathname = usePathname();
 
   return (
     <aside
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
       className={`fixed inset-0 z-50 flex h-dvh w-full flex-col border-white/10 bg-[#0a1a27]/95 p-4 backdrop-blur-xl transition-transform duration-300 md:static md:z-auto md:h-auto md:w-64 md:shrink-0 md:border-r md:bg-[#0a1a27]/70 md:p-5 ${
-        open ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        open
+          ? "pointer-events-auto translate-x-0"
+          : "pointer-events-none -translate-x-full md:pointer-events-auto md:translate-x-0"
       }`}
     >
       <div className="flex items-center justify-between gap-4 md:block">
@@ -34,9 +46,10 @@ export default function Sidebar({ open, onClose, onNavigate }: SidebarProps) {
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full border border-white/15 bg-white/5 px-3 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10 md:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/80 transition hover:bg-white/10 md:hidden"
+          aria-label="Close sidebar"
         >
-          Close
+          <span className="text-xl leading-none">×</span>
         </button>
       </div>
 
