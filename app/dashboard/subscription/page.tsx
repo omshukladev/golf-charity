@@ -9,6 +9,7 @@ import GlassCard from "@/components/dashboard/GlassCard";
 export default function SubscriptionPage() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [plan, setPlan] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetchSubscription = async () => {
@@ -20,7 +21,7 @@ export default function SubscriptionPage() {
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("is_subscribed, plan")
+      .select("plan, subscription_expires_at")
       .eq("id", user.id)
       .single();
 
@@ -30,8 +31,13 @@ export default function SubscriptionPage() {
     }
 
     if (data) {
-      setIsSubscribed(data.is_subscribed);
+      const isActive =
+        data.subscription_expires_at &&
+        new Date(data.subscription_expires_at) > new Date();
+
+      setIsSubscribed(!!isActive);
       setPlan(data.plan);
+      setExpiresAt(data.subscription_expires_at);
     }
   };
 
@@ -84,7 +90,7 @@ export default function SubscriptionPage() {
                 <button
                   onClick={() =>
                     handleSubscribe(
-                      process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY!
+                      process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY!,
                     )
                   }
                   disabled={loading}
@@ -96,7 +102,7 @@ export default function SubscriptionPage() {
                 <button
                   onClick={() =>
                     handleSubscribe(
-                      process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY!
+                      process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY!,
                     )
                   }
                   disabled={loading}
@@ -111,7 +117,14 @@ export default function SubscriptionPage() {
               <p className="text-green-400 font-semibold">
                 Subscription Active
               </p>
+
               <p className="text-white/70">Plan: {plan}</p>
+
+              {expiresAt && (
+                <p className="text-white/60 text-sm">
+                  Expires on: {new Date(expiresAt).toLocaleDateString()}
+                </p>
+              )}
             </div>
           )}
         </GlassCard>

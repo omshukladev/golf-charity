@@ -28,11 +28,13 @@ export async function POST(req: Request) {
       sig,
       process.env.STRIPE_WEBHOOK_SECRET!,
     );
-  } catch {
+  } catch (err) {
     return new Response("Webhook Error", { status: 400 });
   }
 
+  // =========================
   // CHECKOUT SUCCESS
+  // =========================
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
 
@@ -43,16 +45,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ received: true });
     }
 
+    let expires: Date;
+
+    // get exact expiry from stripe
+    if (session.subscription) {
+      const subscription = await stripe.subscriptions.retrieve(
+        session.subscription as string,
+      );
+
+      expires = new Date(subscription.current_period_end * 1000);
+    } else {
+      // fallback (should not happen usually)
+      expires = new Date();
+      if (plan === "monthly") {
+        expires.setMonth(expires.getMonth() + 1);
+      } else {
+        expires.setFullYear(expires.getFullYear() + 1);
+      }
+    }
+
     await supabase
       .from("profiles")
       .update({
         is_subscribed: true,
         plan: plan,
+        subscription_expires_at: expires.toISOString(),
       })
       .eq("id", userId);
   }
 
+  // =========================
   // PAYMENT FAILED
+  // =========================
   if (event.type === "invoice.payment_failed") {
     const invoice = event.data.object as Stripe.Invoice;
 
@@ -63,7 +87,6 @@ export async function POST(req: Request) {
     }
 
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-
     const userId = subscription.metadata?.userId;
 
     if (userId) {
@@ -72,12 +95,15 @@ export async function POST(req: Request) {
         .update({
           is_subscribed: false,
           plan: null,
+          subscription_expires_at: null,
         })
         .eq("id", userId);
     }
   }
 
+  // =========================
   // SUBSCRIPTION CANCELLED
+  // =========================
   if (event.type === "customer.subscription.deleted") {
     const subscription = event.data.object as Stripe.Subscription;
 
@@ -89,6 +115,7 @@ export async function POST(req: Request) {
         .update({
           is_subscribed: false,
           plan: null,
+          subscription_expires_at: null,
         })
         .eq("id", userId);
     }
