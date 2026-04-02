@@ -11,7 +11,6 @@ export default function SubscriptionPage() {
   const [plan, setPlan] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Fetch subscription
   const fetchSubscription = async () => {
     const {
       data: { user },
@@ -40,29 +39,29 @@ export default function SubscriptionPage() {
     fetchSubscription();
   }, []);
 
-  // Subscribe (fake)
-  const handleSubscribe = async (selectedPlan: string) => {
+  const handleSubscribe = async (priceId: string) => {
     setLoading(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ priceId }),
+      });
 
-    if (!user) return;
+      const data = await res.json();
 
-    const { error } = await supabase.from("profiles").upsert({
-      id: user.id,
-      is_subscribed: true,
-      plan: selectedPlan,
-    });
-
-    if (error) {
-      console.error(error);
-      alert("Subscription failed");
-    } else {
-      setIsSubscribed(true);
-      setPlan(selectedPlan);
-      alert("Subscribed successfully");
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        console.error(data);
+        alert("Failed to start checkout");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Something went wrong");
     }
 
     setLoading(false);
@@ -83,7 +82,11 @@ export default function SubscriptionPage() {
 
               <div className="flex gap-4">
                 <button
-                  onClick={() => handleSubscribe("monthly")}
+                  onClick={() =>
+                    handleSubscribe(
+                      process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY!
+                    )
+                  }
                   disabled={loading}
                   className="px-5 py-3 bg-yellow-400 text-black rounded"
                 >
@@ -91,7 +94,11 @@ export default function SubscriptionPage() {
                 </button>
 
                 <button
-                  onClick={() => handleSubscribe("yearly")}
+                  onClick={() =>
+                    handleSubscribe(
+                      process.env.NEXT_PUBLIC_STRIPE_PRICE_YEARLY!
+                    )
+                  }
                   disabled={loading}
                   className="px-5 py-3 bg-yellow-400 text-black rounded"
                 >
