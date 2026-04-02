@@ -48,9 +48,10 @@ export default function AdminPage() {
     setLoading(false);
   };
 
-  const isActive = (user: User) =>
-    user.subscription_expires_at &&
-    new Date(user.subscription_expires_at) > new Date();
+  const isActive = (user: User): boolean => {
+    if (!user.subscription_expires_at) return false;
+    return new Date(user.subscription_expires_at) > new Date();
+  };
 
   const total = users.length;
   const active = users.filter((u) => isActive(u)).length;
