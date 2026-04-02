@@ -22,7 +22,10 @@ export default function WinningsPage() {
   const [loading, setLoading] = useState(true);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
 
+  // FETCH DRAWS
   const fetchDraws = async () => {
+    setLoading(true);
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -50,7 +53,8 @@ export default function WinningsPage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error(error);
+      console.error("Fetch error:", error);
+      setDraws([]);
       setLoading(false);
       return;
     }
@@ -62,7 +66,7 @@ export default function WinningsPage() {
         year: d.year,
         is_winner: d.is_winner,
         created_at: d.created_at,
-        status: d.status,
+        status: d.status || "pending",
         proof_url: d.proof_url,
         charity_name: d.charities?.name || null,
       })) || [];
@@ -75,65 +79,83 @@ export default function WinningsPage() {
     fetchDraws();
   }, []);
 
-  // PROOF UPLOAD FUNCTION (FINAL)
+  // UPLOAD PROOF
   const handleProofUpload = async (file: File, drawId: string) => {
-  try {
-    setUploadingId(drawId);
+    try {
+      setUploadingId(drawId);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    if (!user) {
+      if (!user) {
+        setUploadingId(null);
+        return;
+      }
+
+      const fileExt = file.name.split(".").pop() || "jpg";
+
+      // overwrite same file every time
+      const filePath = `${user.id}/${drawId}.${fileExt}`;
+
+      // 1. UPLOAD FILE
+      const { error: uploadError } = await supabase.storage
+        .from("proofs")
+        .upload(filePath, file, {
+          upsert: true,
+          contentType: file.type,
+        });
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        alert("Upload failed");
+        setUploadingId(null);
+        return;
+      }
+
+      // 2. GET PUBLIC URL
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("proofs").getPublicUrl(filePath);
+
+      if (!publicUrl) {
+        console.error("Public URL missing");
+        setUploadingId(null);
+        return;
+      }
+
+      // 3. UPDATE DATABASE
+      const { error: updateError } = await supabase
+        .from("draws")
+        .update({
+          proof_url: publicUrl,
+          status: "submitted",
+        })
+        .eq("id", drawId);
+
+      if (updateError) {
+        console.error("DB update error:", updateError);
+        alert("Failed to save proof");
+        setUploadingId(null);
+        return;
+      }
+
+      // 4. REFRESH UI
+      await fetchDraws();
       setUploadingId(null);
-      return;
-    }
-
-    const fileExt = file.name.split(".").pop() || "jpg";
-
-    // FIX ESLINT
-    const timestamp = new Date().getTime();
-    const filePath = `${user.id}/${drawId}-${timestamp}.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("proofs")
-      .upload(filePath, file, {
-        contentType: file.type,
-      });
-
-    if (uploadError) {
-      console.error(uploadError);
+    } catch (err) {
+      console.error("Unexpected error:", err);
       setUploadingId(null);
-      return;
     }
+  };
 
-    const { data: publicUrlData } = supabase.storage
-      .from("proofs")
-      .getPublicUrl(filePath);
-
-    const publicUrl = publicUrlData.publicUrl;
-
-    const { error: updateError } = await supabase
-      .from("draws")
-      .update({
-        proof_url: publicUrl,
-        status: "submitted",
-      })
-      .eq("id", drawId);
-
-    if (updateError) {
-      console.error(updateError);
-      setUploadingId(null);
-      return;
-    }
-
-    setUploadingId(null);
-    fetchDraws();
-  } catch (err) {
-    console.error(err);
-    setUploadingId(null);
-  }
-};
+  const getStatusLabel = (status: string) => {
+    if (status === "pending") return "Pending";
+    if (status === "submitted") return "Waiting for verification";
+    if (status === "verified") return "Approved by admin";
+    if (status === "rejected") return "Rejected by admin";
+    return "Unknown";
+  };
 
   return (
     <DashboardLayout>
@@ -166,7 +188,7 @@ export default function WinningsPage() {
                       </p>
 
                       <p className="text-xs text-white/40">
-                        Status: {draw.status}
+                        Status: {getStatusLabel(draw.status)}
                       </p>
                     </div>
 
@@ -179,15 +201,12 @@ export default function WinningsPage() {
                     </span>
                   </div>
 
-                  {/* WINNER ACTIONS */}
                   {draw.is_winner && (
                     <>
-                      {/* Uploading */}
                       {uploadingId === draw.id && (
                         <p className="text-xs text-yellow-300">Uploading...</p>
                       )}
 
-                      {/* Upload button */}
                       {draw.status === "pending" && uploadingId !== draw.id && (
                         <label className="cursor-pointer text-xs text-yellow-300 underline">
                           Upload Proof
@@ -205,18 +224,29 @@ export default function WinningsPage() {
                         </label>
                       )}
 
-                      {/* Uploaded */}
                       {draw.status === "submitted" && (
-                        <p className="text-xs text-green-400 font-semibold">
-                          Proof Uploaded
+                        <p className="text-xs text-yellow-300 font-semibold">
+                          Waiting for admin approval
                         </p>
                       )}
 
-                      {/* View Proof */}
+                      {draw.status === "verified" && (
+                        <p className="text-xs text-green-400 font-semibold">
+                          Approved by admin
+                        </p>
+                      )}
+
+                      {draw.status === "rejected" && (
+                        <p className="text-xs text-red-400 font-semibold">
+                          Rejected by admin
+                        </p>
+                      )}
+
                       {draw.proof_url && (
                         <a
                           href={draw.proof_url}
                           target="_blank"
+                          rel="noopener noreferrer"
                           className="text-xs text-blue-400 underline"
                         >
                           View Proof
