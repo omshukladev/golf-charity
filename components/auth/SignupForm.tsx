@@ -23,7 +23,7 @@ export default function SignupForm() {
       email,
       password,
     });
-    
+
     if (error) {
       setError(error.message);
       setLoading(false);
@@ -37,7 +37,7 @@ export default function SignupForm() {
       return;
     }
 
-    setSuccess("Signup successful. Check your email to confirm.");
+    setSuccess("Signup successful. Please login now to continue.");
     setLoading(false);
   };
 
