@@ -50,10 +50,20 @@ export async function POST(req: Request) {
         ? "monthly"
         : "yearly";
 
+    // OPTIONAL BUT GOOD: create/reuse customer
+    const customer = await stripe.customers.create({
+      email: user.email!,
+      metadata: {
+        userId: user.id,
+      },
+    });
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "subscription",
-      customer_email: user.email!,
+
+      customer: customer.id, 
+
       line_items: [
         {
           price: priceId,
@@ -61,11 +71,13 @@ export async function POST(req: Request) {
         },
       ],
 
+      // used in checkout event
       metadata: {
         userId: user.id,
         plan: plan,
       },
 
+      // used in subscription lifecycle events (admin cancel, payment fail)
       subscription_data: {
         metadata: {
           userId: user.id,
