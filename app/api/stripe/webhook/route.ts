@@ -7,7 +7,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 export async function POST(req: Request) {
@@ -17,7 +17,6 @@ export async function POST(req: Request) {
   const sig = headersList.get("stripe-signature");
 
   if (!sig) {
-    console.error("No Stripe signature found");
     return new Response("No signature", { status: 400 });
   }
 
@@ -27,63 +26,58 @@ export async function POST(req: Request) {
     event = stripe.webhooks.constructEvent(
       body,
       sig,
-      process.env.STRIPE_WEBHOOK_SECRET!,
+      process.env.STRIPE_WEBHOOK_SECRET!
     );
   } catch (err) {
-    console.error("Webhook signature error:", err);
     return new Response("Webhook Error", { status: 400 });
   }
 
-  console.log("Webhook received:", event.type);
-
-  // PAYMENT SUCCESS
+  // HANDLE CHECKOUT SUCCESS
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
 
-    // safer email extraction
-    const email = (
-      session.customer_email || session.customer_details?.email
-    )?.toLowerCase();
+    const emailRaw =
+      session.customer_email || session.customer_details?.email;
 
-    console.log("Customer email:", email);
-
-    if (!email) {
-      console.error("No email found in session");
-      return new Response("No email", { status: 400 });
+    if (!emailRaw) {
+      return NextResponse.json({ received: true });
     }
 
-    // get plan from metadata (fallback to monthly)
+    const email = emailRaw.trim().toLowerCase();
+
     const plan = session.metadata?.plan || "monthly";
 
-    console.log("Plan:", plan);
-
-    // find profile
-    const { data: profile, error: fetchError } = await supabase
+    //  Try exact match
+    let { data: profile } = await supabase
       .from("profiles")
       .select("id")
       .eq("email", email)
-      .single();
+      .maybeSingle();
 
-    if (fetchError || !profile) {
-      console.error("Profile not found:", fetchError);
-      return new Response("Profile not found", { status: 404 });
+    // Fallback → case-insensitive match
+    if (!profile) {
+      const { data: fallbackProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .ilike("email", email)
+        .maybeSingle();
+
+      profile = fallbackProfile;
     }
 
-    // update subscription
-    const { error: updateError } = await supabase
+    // If still not found → DO NOT FAIL
+    if (!profile) {
+      return NextResponse.json({ received: true });
+    }
+
+    //  Update subscription
+    await supabase
       .from("profiles")
       .update({
         is_subscribed: true,
         plan: plan,
       })
       .eq("id", profile.id);
-
-    if (updateError) {
-      console.error("Update failed:", updateError);
-      return new Response("Update failed", { status: 500 });
-    }
-
-    console.log("Subscription updated for:", email);
   }
 
   return NextResponse.json({ received: true });
