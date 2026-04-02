@@ -10,7 +10,7 @@ const pricing = [
   },
   {
     name: "Yearly",
-    amount: "$100",
+    amount: "$15",
     period: "/year",
     detail: "2 months free + boosted draw credits.",
     highlight: true,
