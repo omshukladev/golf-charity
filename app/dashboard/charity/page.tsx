@@ -15,10 +15,12 @@ type Charity = {
 export default function CharityPage() {
   const [charities, setCharities] = useState<Charity[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [isPremium, setIsPremium] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
-  // Fetch charities + user profile
+  // FETCH DATA
   const fetchData = async () => {
     setInitialLoading(true);
 
@@ -31,29 +33,25 @@ export default function CharityPage() {
       return;
     }
 
-    // Fetch charities
-    const { data: charitiesData, error: charitiesError } = await supabase
+    // GET CHARITIES
+    const { data: charitiesData } = await supabase
       .from("charities")
       .select("*")
       .order("created_at", { ascending: false });
 
-    // Fetch profile
-    const { data: profileData, error: profileError } = await supabase
+    // GET PROFILE
+    const { data: profileData } = await supabase
       .from("profiles")
-      .select("charity_id")
+      .select("charity_id, is_subscribed")
       .eq("id", user.id)
       .single();
 
-    if (charitiesError) {
-      console.error("Charities fetch error:", charitiesError);
-    }
-
-    if (profileError) {
-      console.error("Profile fetch error:", profileError);
-    }
-
     if (charitiesData) setCharities(charitiesData);
-    if (profileData?.charity_id) setSelected(profileData.charity_id);
+
+    if (profileData) {
+      setSelected(profileData.charity_id);
+      setIsPremium(profileData.is_subscribed === true);
+    }
 
     setInitialLoading(false);
   };
@@ -62,8 +60,25 @@ export default function CharityPage() {
     fetchData();
   }, []);
 
-  // Save selected charity
+  // SELECT CHARITY
+  const handleSelect = (id: string) => {
+    if (!isPremium) {
+      alert(
+        "You are not a premium member. Please subscribe to select a charity.",
+      );
+      return;
+    }
+
+    setSelected(id);
+  };
+
+  // SAVE
   const handleSave = async () => {
+    if (!isPremium) {
+      alert("You are not a premium member. Please subscribe to save.");
+      return;
+    }
+
     if (!selected) {
       alert("Please select a charity");
       return;
@@ -86,10 +101,9 @@ export default function CharityPage() {
       .eq("id", user.id);
 
     if (error) {
-      console.error("Update error:", error);
-      alert("Failed to save selection");
+      alert("Failed to save");
     } else {
-      alert("Charity selection saved");
+      alert("Charity saved");
     }
 
     setLoading(false);
@@ -103,6 +117,13 @@ export default function CharityPage() {
           subtitle="Choose a charity to support with your subscription."
         />
 
+        {!isPremium && (
+          <div className="rounded-xl border border-yellow-300/30 bg-yellow-400/10 px-4 py-2 text-sm text-yellow-300">
+            You are not a premium member. You can view charities but cannot
+            select.
+          </div>
+        )}
+
         <GlassCard>
           {initialLoading ? (
             <p className="text-white/70">Loading...</p>
@@ -113,12 +134,12 @@ export default function CharityPage() {
               {charities.map((charity) => (
                 <div
                   key={charity.id}
-                  onClick={() => setSelected(charity.id)}
+                  onClick={() => handleSelect(charity.id)}
                   className={`cursor-pointer rounded-2xl border p-4 transition ${
                     selected === charity.id
                       ? "border-[#ffe7a3] bg-[#ffe7a3]/10"
                       : "border-white/10 hover:border-white/30"
-                  }`}
+                  } ${!isPremium ? "opacity-70" : ""}`}
                 >
                   <h3 className="text-lg font-semibold text-white">
                     {charity.name}
