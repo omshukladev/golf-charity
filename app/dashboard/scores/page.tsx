@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import PageHeader from "@/components/dashboard/PageHeader";
 import GlassCard from "@/components/dashboard/GlassCard";
@@ -15,14 +16,49 @@ type Score = {
 };
 
 export default function ScoresPage() {
+  const router = useRouter();
+
   const [scores, setScores] = useState<Score[]>([]);
   const [score, setScore] = useState("");
   const [date, setDate] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  // Fetch scores (ONLY current user)
+  // CHECK SUBSCRIPTION FIRST
+  useEffect(() => {
+    const checkAccess = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_subscribed")
+        .eq("id", user.id)
+        .single();
+
+      if (!profile?.is_subscribed) {
+        alert("You are not a premium member. Please subscribe first.");
+        router.push("/dashboard/subscription?required=true");
+        return;
+      }
+
+      //  ONLY LOAD DATA AFTER ACCESS CONFIRMED
+      await fetchScores();
+      setPageLoading(false);
+    };
+
+    checkAccess();
+  }, []);
+
+  // Fetch scores
   const fetchScores = async () => {
     const {
       data: { user },
@@ -37,22 +73,12 @@ export default function ScoresPage() {
       .order("created_at", { ascending: false })
       .limit(5);
 
-    if (error) {
-      console.error("Fetch error:", error);
-    } else {
+    if (!error) {
       setScores(data || []);
     }
   };
 
-  useEffect(() => {
-    const loadScores = async () => {
-      await fetchScores();
-    };
-
-    void loadScores();
-  }, []);
-
-  // Add score with rolling logic
+  // Add score
   const handleAddScore = async () => {
     setErrorMessage("");
     setSuccessMessage("");
@@ -75,45 +101,21 @@ export default function ScoresPage() {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user) {
-      setErrorMessage("User is not logged in.");
-      setLoading(false);
-      return;
-    }
+    if (!user) return;
 
-    // Get current scores (newest first)
-    const { data: existingScores, error: fetchError } = await supabase
+    const { data: existingScores } = await supabase
       .from("scores")
       .select("id")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
-    if (fetchError) {
-      console.error("Fetch error:", fetchError);
-      setErrorMessage("Could not load existing scores.");
-      setLoading(false);
-      return;
-    }
-
-    // Keep only 4 newest before insert so total always stays at 5.
     if (existingScores && existingScores.length >= 5) {
       const idsToDelete = existingScores.slice(4).map((s) => s.id);
 
-      const { error: deleteError } = await supabase
-        .from("scores")
-        .delete()
-        .in("id", idsToDelete);
-
-      if (deleteError) {
-        console.error("Delete error:", deleteError);
-        setErrorMessage("Could not update rolling score window.");
-        setLoading(false);
-        return;
-      }
+      await supabase.from("scores").delete().in("id", idsToDelete);
     }
 
-    // Insert new score
-    const { error: insertError } = await supabase.from("scores").insert([
+    await supabase.from("scores").insert([
       {
         user_id: user.id,
         score: numericScore,
@@ -121,14 +123,6 @@ export default function ScoresPage() {
       },
     ]);
 
-    if (insertError) {
-      console.error("Insert error:", insertError);
-      setErrorMessage("Error inserting score.");
-      setLoading(false);
-      return;
-    }
-
-    // Refresh UI
     setScore("");
     setDate("");
     setSuccessMessage("Score added successfully.");
@@ -136,11 +130,15 @@ export default function ScoresPage() {
     fetchScores();
   };
 
+  if (pageLoading) {
+    return <p className="text-white p-6">Checking access...</p>;
+  }
+
   return (
     <DashboardLayout>
       <PageHeader
         title="Your Scores"
-        subtitle="Add your recent rounds. We keep only your latest 5 entries for draw matching."
+        subtitle="Add your recent rounds. We keep only your latest 5 entries."
       />
 
       <div className="grid gap-5 lg:grid-cols-[1.05fr_1.4fr]">
@@ -148,41 +146,26 @@ export default function ScoresPage() {
           <h2 className="text-lg font-semibold">Add Score</h2>
 
           <div className="mt-4 flex flex-col gap-3">
-            <label className="block">
-              <span className="mb-2 block text-sm text-white/80">Score</span>
-              <input
-                type="number"
-                placeholder="Enter score (1-45)"
-                value={score}
-                onChange={(e) => setScore(e.target.value)}
-                className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-white placeholder:text-white/45 outline-none transition focus:border-[#45b394]/70 focus:ring-2 focus:ring-[#45b394]/30"
-              />
-            </label>
+            <input
+              type="number"
+              placeholder="Score (1-45)"
+              value={score}
+              onChange={(e) => setScore(e.target.value)}
+              className="w-full p-3 rounded bg-white/5"
+            />
 
-            <label className="block">
-              <span className="mb-2 block text-sm text-white/80">
-                Played At
-              </span>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-[#45b394]/70 focus:ring-2 focus:ring-[#45b394]/30"
-              />
-            </label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full p-3 rounded bg-white/5"
+            />
           </div>
 
-          {errorMessage ? (
-            <p className="mt-4 rounded-xl border border-red-300/35 bg-red-400/10 px-3 py-2 text-sm text-red-200">
-              {errorMessage}
-            </p>
-          ) : null}
-
-          {successMessage ? (
-            <p className="mt-4 rounded-xl border border-emerald-300/35 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-200">
-              {successMessage}
-            </p>
-          ) : null}
+          {errorMessage && <p className="text-red-400 mt-2">{errorMessage}</p>}
+          {successMessage && (
+            <p className="text-green-400 mt-2">{successMessage}</p>
+          )}
 
           <Button onClick={handleAddScore} loading={loading}>
             Add Score
@@ -192,25 +175,12 @@ export default function ScoresPage() {
         <GlassCard>
           <h2 className="text-lg font-semibold">Latest Scores</h2>
 
-          {scores.length === 0 ? (
-            <p className="mt-4 text-sm text-white/65">
-              No scores yet. Add your first score.
-            </p>
-          ) : (
-            <div className="mt-4 flex flex-col gap-2">
-              {scores.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3"
-                >
-                  <span className="font-medium text-[#ffe7a3]">
-                    Score: {s.score}
-                  </span>
-                  <span className="text-sm text-white/70">{s.played_at}</span>
-                </div>
-              ))}
+          {scores.map((s) => (
+            <div key={s.id} className="mt-3 flex justify-between">
+              <span>Score: {s.score}</span>
+              <span>{s.played_at}</span>
             </div>
-          )}
+          ))}
         </GlassCard>
       </div>
     </DashboardLayout>
