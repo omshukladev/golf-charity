@@ -28,7 +28,7 @@ export async function POST(req: Request) {
       sig,
       process.env.STRIPE_WEBHOOK_SECRET!,
     );
-  } catch (err) {
+  } catch {
     return new Response("Webhook Error", { status: 400 });
   }
 
@@ -47,16 +47,22 @@ export async function POST(req: Request) {
 
     let expires: Date;
 
-    // get exact expiry from stripe
     if (session.subscription) {
       const subscription = await stripe.subscriptions.retrieve(
         session.subscription as string,
       );
 
-      expires = new Date(subscription.current_period_end * 1000);
+      const item = subscription.items.data[0];
+
+      if (item && item.current_period_end) {
+        expires = new Date(item.current_period_end * 1000);
+      } else {
+        expires = new Date();
+        expires.setMonth(expires.getMonth() + 1);
+      }
     } else {
-      // fallback (should not happen usually)
       expires = new Date();
+
       if (plan === "monthly") {
         expires.setMonth(expires.getMonth() + 1);
       } else {
@@ -80,13 +86,14 @@ export async function POST(req: Request) {
   if (event.type === "invoice.payment_failed") {
     const invoice = event.data.object as Stripe.Invoice;
 
-    const subscriptionId = (invoice as any).subscription;
+    const subscriptionId = invoice.subscription as string | null;
 
-    if (!subscriptionId || typeof subscriptionId !== "string") {
+    if (!subscriptionId) {
       return NextResponse.json({ received: true });
     }
 
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+
     const userId = subscription.metadata?.userId;
 
     if (userId) {
