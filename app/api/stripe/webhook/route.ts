@@ -7,7 +7,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 export async function POST(req: Request) {
@@ -26,58 +26,72 @@ export async function POST(req: Request) {
     event = stripe.webhooks.constructEvent(
       body,
       sig,
-      process.env.STRIPE_WEBHOOK_SECRET!
+      process.env.STRIPE_WEBHOOK_SECRET!,
     );
-  } catch (err) {
+  } catch {
     return new Response("Webhook Error", { status: 400 });
   }
 
-  // HANDLE CHECKOUT SUCCESS
+  // CHECKOUT SUCCESS
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
 
-    const emailRaw =
-      session.customer_email || session.customer_details?.email;
-
-    if (!emailRaw) {
-      return NextResponse.json({ received: true });
-    }
-
-    const email = emailRaw.trim().toLowerCase();
-
+    const userId = session.metadata?.userId;
     const plan = session.metadata?.plan || "monthly";
 
-    //  Try exact match
-    let { data: profile } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
-
-    // Fallback → case-insensitive match
-    if (!profile) {
-      const { data: fallbackProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .ilike("email", email)
-        .maybeSingle();
-
-      profile = fallbackProfile;
-    }
-
-    // If still not found → DO NOT FAIL
-    if (!profile) {
+    if (!userId) {
       return NextResponse.json({ received: true });
     }
 
-    //  Update subscription
     await supabase
       .from("profiles")
       .update({
         is_subscribed: true,
         plan: plan,
       })
-      .eq("id", profile.id);
+      .eq("id", userId);
+  }
+
+  // PAYMENT FAILED
+  if (event.type === "invoice.payment_failed") {
+    const invoice = event.data.object as Stripe.Invoice;
+
+    const subscriptionId = (invoice as any).subscription;
+
+    if (!subscriptionId || typeof subscriptionId !== "string") {
+      return NextResponse.json({ received: true });
+    }
+
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+
+    const userId = subscription.metadata?.userId;
+
+    if (userId) {
+      await supabase
+        .from("profiles")
+        .update({
+          is_subscribed: false,
+          plan: null,
+        })
+        .eq("id", userId);
+    }
+  }
+
+  // SUBSCRIPTION CANCELLED
+  if (event.type === "customer.subscription.deleted") {
+    const subscription = event.data.object as Stripe.Subscription;
+
+    const userId = subscription.metadata?.userId;
+
+    if (userId) {
+      await supabase
+        .from("profiles")
+        .update({
+          is_subscribed: false,
+          plan: null,
+        })
+        .eq("id", userId);
+    }
   }
 
   return NextResponse.json({ received: true });

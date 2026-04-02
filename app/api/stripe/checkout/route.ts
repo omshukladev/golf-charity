@@ -42,9 +42,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing priceId" }, { status: 400 });
     }
 
-    // dynamic base URL (works for localhost + vercel)
     const baseUrl =
       process.env.NEXT_PUBLIC_BASE_URL || new URL(req.url).origin;
+
+    const plan =
+      priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY
+        ? "monthly"
+        : "yearly";
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -57,12 +61,15 @@ export async function POST(req: Request) {
         },
       ],
 
-      // IMPORTANT: pass plan
       metadata: {
-        plan:
-          priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY
-            ? "monthly"
-            : "yearly",
+        userId: user.id,
+        plan: plan,
+      },
+
+      subscription_data: {
+        metadata: {
+          userId: user.id,
+        },
       },
 
       success_url: `${baseUrl}/dashboard?success=true`,
