@@ -14,7 +14,7 @@ type Draw = {
   created_at: string;
   charities?: {
     name: string;
-  } | null;
+  }[] | null;
 };
 
 export default function WinningsPage() {
@@ -83,7 +83,7 @@ export default function WinningsPage() {
 
                     <p className="text-sm text-white/60">
                       Charity:{" "}
-                      {draw.charities?.name || "Not selected"}
+                      {draw.charities?.[0]?.name || "Not selected"}
                     </p>
                   </div>
 
