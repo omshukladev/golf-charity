@@ -39,6 +39,21 @@ export async function middleware(request: NextRequest) {
   const isLanding = request.nextUrl.pathname === "/";
   const isPublicPage = isAuthPage || isLanding;
 
+  // admin middleware
+  const isAdminRoute = request.nextUrl.pathname.startsWith("/admin");
+
+  if (user && isAdminRoute) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.is_admin) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+  }
+
   // Not logged in users can only access public routes.
   if (!user && !isPublicPage) {
     return NextResponse.redirect(new URL("/login", request.url));
